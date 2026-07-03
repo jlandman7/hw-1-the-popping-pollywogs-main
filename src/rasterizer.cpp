@@ -1,4 +1,5 @@
 #include "rasterizer.h"
+#include <cmath>
 
 using namespace std;
 
@@ -37,7 +38,8 @@ namespace CGL {
     if (sx < 0 || sx >= width) return;
     if (sy < 0 || sy >= height) return;
 
-    fill_pixel(sx, sy, color);
+    for (int n = 0; n < sample_rate; n++)
+      sample_buffer[(sy * width + sx) * sample_rate + n] = color;
     return;
   }
 
@@ -70,14 +72,11 @@ namespace CGL {
                                        float x2, float y2,
                                        Color color) {
 
-    std::cout << "Rasterizing triangle\n";                                  
-
     // Determine winding (positive = CCW)
     
     float winding =
         (x1 - x0) * (y2 - y0) -
         (y1 - y0) * (x2 - x0);
-    std::cout << "winding : " << winding << "\n";  
 
     // Bounding box
     int xmin = (int)floor(std::min({x0, x1, x2}));
@@ -85,11 +84,14 @@ namespace CGL {
     int ymin = (int)floor(std::min({y0, y1, y2}));
     int ymax = (int)ceil (std::max({y0, y1, y2}));
 
+    const int N = std::sqrt(sample_rate);
     for (int y = ymin; y <= ymax; y++) {
-        for (int x = xmin; x <= xmax; x++) {
-
-            float px = x + 0.5f;
-            float py = y + 0.5f;
+      for (int x = xmin; x <= xmax; x++) {
+        for (int n = 0; n < N; n++){
+          float py = y + (n + 0.5f)/N;
+          
+          for (int m = 0; m < N; m++){
+            float px = x + (m + 0.5f)/N;
 
             // Edge functions
             float e0 =
@@ -105,14 +107,20 @@ namespace CGL {
                 (py - y2) * (x0 - x2);
 
             if (winding < 0) {
-                if (e0 >= 0 && e1 >= 0 && e2 >= 0)
-                    fill_pixel(x, y, color);
+              if (e0 >= 0 && e1 >= 0 && e2 >= 0){
+                  int sample_index = n*N + m;
+                  sample_buffer[(y * width + x) * sample_rate + sample_index] = color;
+              }
             }
             else {
-                if (e0 <= 0 && e1 <= 0 && e2 <= 0)
-                    fill_pixel(x, y, color);
+              if (e0 <= 0 && e1 <= 0 && e2 <= 0) {
+                  int sample_index = n*N + m;
+                  sample_buffer[(y * width + x) * sample_rate + sample_index] = color;
+              }
             }
+          }
         }
+      }
     }
 
     // TODO: Task 2: Update to implement super-sampled rasterization
@@ -125,8 +133,61 @@ namespace CGL {
   {
     // TODO: Task 4: Rasterize the triangle, calculating barycentric coordinates and using them to interpolate vertex colors across the triangle
     // Hint: You can reuse code from rasterize_triangle
+    
+    // Determine winding (positive = CCW)
 
+    float winding =
+        (x1 - x0) * (y2 - y0) -
+        (y1 - y0) * (x2 - x0);
 
+    // Bounding box
+    int xmin = (int)floor(std::min({x0, x1, x2}));
+    int xmax = (int)ceil (std::max({x0, x1, x2}));
+    int ymin = (int)floor(std::min({y0, y1, y2}));
+    int ymax = (int)ceil (std::max({y0, y1, y2}));
+
+    const int N = std::sqrt(sample_rate);
+    for (int y = ymin; y <= ymax; y++) {
+      for (int x = xmin; x <= xmax; x++) {
+        for (int n = 0; n < N; n++){
+          float py = y + (n + 0.5f)/N;
+          
+          for (int m = 0; m < N; m++){
+            float px = x + (m + 0.5f)/N;
+
+            Color color = c0 * ((x1 - px) * (y2 - py) - (y1 - py) * (x2 - px)) * (1.0f/winding) +
+                    c1 * ((x2 - px) * (y0 - py) - (y2 - py) * (x0 - px)) * (1.0f/winding) +
+                    c2 * ((x0 - px) * (y1 - py) - (y0 - py) * (x1 - px)) * (1.0f/winding);
+
+            // Edge functions
+            float e0 =
+                (px - x0) * (y1 - y0) -
+                (py - y0) * (x1 - x0);
+
+            float e1 =
+                (px - x1) * (y2 - y1) -
+                (py - y1) * (x2 - x1);
+
+            float e2 =
+                (px - x2) * (y0 - y2) -
+                (py - y2) * (x0 - x2);
+
+            if (winding < 0) {
+              if (e0 >= 0 && e1 >= 0 && e2 >= 0){
+                  int sample_index = n*N + m;
+                  sample_buffer[(y * width + x) * sample_rate + sample_index] = color;
+              }
+            }
+            else {
+              if (e0 <= 0 && e1 <= 0 && e2 <= 0) {
+                  int sample_index = n*N + m;
+                  sample_buffer[(y * width + x) * sample_rate + sample_index] = color;
+              }
+            }
+          }
+        }
+      }
+    }
 
   }
 
@@ -139,19 +200,103 @@ namespace CGL {
     // TODO: Task 5: Fill in the SampleParams struct and pass it to the tex.sample function.
     // TODO: Task 6: Set the correct barycentric differentials in the SampleParams struct.
     // Hint: You can reuse code from rasterize_triangle/rasterize_interpolated_color_triangle
+    /*
+    struct SampleParams {
+      Vector2D p_uv;
+      Vector2D p_dx_uv, p_dy_uv;
+      PixelSampleMethod psm;
+      LevelSampleMethod lsm;
+    };
+    */
+    float winding =
+        (x1 - x0) * (y2 - y0) -
+        (y1 - y0) * (x2 - x0);
 
+    // Bounding box
+    int xmin = (int)floor(std::min({x0, x1, x2}));
+    int xmax = (int)ceil (std::max({x0, x1, x2}));
+    int ymin = (int)floor(std::min({y0, y1, y2}));
+    int ymax = (int)ceil (std::max({y0, y1, y2}));
 
+    const int N = std::sqrt(sample_rate);
+    for (int y = ymin; y <= ymax; y++) {
+      for (int x = xmin; x <= xmax; x++) {
+        for (int n = 0; n < N; n++){
+          float py = y + (n + 0.5f)/N;
+          
+          for (int m = 0; m < N; m++){
+            float px = x + (m + 0.5f)/N;
+            Vector2D pxpy = Vector2D(px, py);
 
+            // Edge functions
+            float e0 =
+                (px - x0) * (y1 - y0) -
+                (py - y0) * (x1 - x0);
 
+            float e1 =
+                (px - x1) * (y2 - y1) -
+                (py - y1) * (x2 - x1);
+
+            float e2 =
+                (px - x2) * (y0 - y2) -
+                (py - y2) * (x0 - x2);
+
+            if (winding < 0) {
+              if (e0 >= 0 && e1 >= 0 && e2 >= 0){
+                  int sample_index = n*N + m;
+                  Vector2D uv = Vector2D(u0, v0) * ((x1 - px) * (y2 - py) - (y1 - py) * (x2 - px)) * (1.0f/winding) +
+                                Vector2D(u1, v1) * ((x2 - px) * (y0 - py) - (y2 - py) * (x0 - px)) * (1.0f/winding) +
+                                Vector2D(u2, v2) * ((x0 - px) * (y1 -py) - (y0 - py) * (x1 - px)) * (1.0f/winding);
+                  Vector2D uv_dx = Vector2D(u0, v0) * ((x1 - px - 1) * (y2 - py) - (y1 - py) * (x2 - px - 1)) * (1.0f/winding) +
+                                Vector2D(u1, v1) * ((x2 - px - 1) * (y0 - py) - (y2 - py) * (x0 - px - 1)) * (1.0f/winding) +
+                                Vector2D(u2, v2) * ((x0 - px - 1) * (y1 - py) - (y0 - py) * (x1 - px - 1)) * (1.0f/winding);
+                  Vector2D uv_dy = Vector2D(u0, v0) * ((x1 - px) * (y2 - py - 1) - (y1 - py - 1) * (x2 - px)) * (1.0f/winding) +
+                                Vector2D(u1, v1) * ((x2 - px) * (y0 - py - 1) - (y2 - py - 1) * (x0 - px)) * (1.0f/winding) +
+                                Vector2D(u2, v2) * ((x0 - px) * (y1 - py - 1) - (y0 - py - 1) * (x1 - px)) * (1.0f/winding);
+                  
+                  SampleParams sp;
+                  sp.p_uv = uv;
+                  sp.p_dx_uv = uv_dx;
+                  sp.p_dy_uv = uv_dy;
+                  sp.psm = psm;
+                  sp.lsm = lsm;
+                  Color c = tex.sample(sp);
+                  sample_buffer[(y * width + x) * sample_rate + sample_index] = c;
+              }
+            }
+            else {
+              if (e0 <= 0 && e1 <= 0 && e2 <= 0) {
+                  int sample_index = n*N + m;
+                  Vector2D uv = Vector2D(u0, v0) * ((x1 - px) * (y2 - py) - (y1 - py) * (x2 - px)) * (1.0f/winding) +
+                                Vector2D(u1, v1) * ((x2 - px) * (y0 - py) - (y2 - py) * (x0 - px)) * (1.0f/winding) +
+                                Vector2D(u2, v2) * ((x0 - px) * (y1 -py) - (y0 - py) * (x1 - px)) * (1.0f/winding);
+                  Vector2D uv_dx = Vector2D(u0, v0) * ((x1 - px - 1) * (y2 - py) - (y1 - py) * (x2 - px - 1)) * (1.0f/winding) +
+                                Vector2D(u1, v1) * ((x2 - px - 1) * (y0 - py) - (y2 - py) * (x0 - px - 1)) * (1.0f/winding) +
+                                Vector2D(u2, v2) * ((x0 - px - 1) * (y1 - py) - (y0 - py) * (x1 - px - 1)) * (1.0f/winding);
+                  Vector2D uv_dy = Vector2D(u0, v0) * ((x1 - px) * (y2 - py - 1) - (y1 - py - 1) * (x2 - px)) * (1.0f/winding) +
+                                Vector2D(u1, v1) * ((x2 - px) * (y0 - py - 1) - (y2 - py - 1) * (x0 - px)) * (1.0f/winding) +
+                                Vector2D(u2, v2) * ((x0 - px) * (y1 - py - 1) - (y0 - py - 1) * (x1 - px)) * (1.0f/winding);
+                  SampleParams sp;
+                  sp.p_uv = uv;
+                  sp.p_dx_uv = uv_dx;
+                  sp.p_dy_uv = uv_dy;
+                  sp.psm = psm;
+                  sp.lsm = lsm;
+                  Color c = tex.sample(sp);
+                  sample_buffer[(y * width + x) * sample_rate + sample_index] = c;
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   void RasterizerImp::set_sample_rate(unsigned int rate) {
     // TODO: Task 2: You may want to update this function for supersampling support
 
     this->sample_rate = rate;
-
-
-    this->sample_buffer.resize(width * height, Color::White);
+    this->sample_buffer.resize(width * height * rate, Color::White);
   }
 
 
@@ -163,9 +308,7 @@ namespace CGL {
     this->width = width;
     this->height = height;
     this->rgb_framebuffer_target = rgb_framebuffer;
-
-
-    this->sample_buffer.resize(width * height, Color::White);
+    this->sample_buffer.resize(width * height * sample_rate, Color::White);
   }
 
 
@@ -186,7 +329,11 @@ namespace CGL {
 
     for (int x = 0; x < width; ++x) {
       for (int y = 0; y < height; ++y) {
-        Color col = sample_buffer[y * width + x];
+        Color col = Color::Black;
+        
+        for (int s = 0; s < sample_rate; ++s)
+          col += (sample_buffer[(y*width + x)*sample_rate + s]);
+        col = col * (1.0f / sample_rate);
 
         for (int k = 0; k < 3; ++k) {
           this->rgb_framebuffer_target[3 * (y * width + x) + k] = (&col.r)[k] * 255;
